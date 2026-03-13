@@ -280,29 +280,75 @@ async function fetchBuildings(): Promise<BuildingData[]> {
   return normalizeApiPayload(json);
 }
 
-function getBestTimeRecommendation(buildings: BuildingData[]) {
-  if (!buildings.length || !buildings[0]?.hourlyTrend.length) {
+function getRoundedCurrentHour() {
+  const now = new Date();
+  let hour = now.getHours();
+  const minutes = now.getMinutes();
+  if (minutes >= 30) hour += 1;
+  return hour;
+}
+
+function timeLabelTo24Hour(label: string) {
+  const match = label.match(/^(\d+)(AM|PM)$/);
+  if (!match) return 0;
+  const rawHour = Number(match[1]);
+  const meridiem = match[2];
+  if (meridiem === "AM") return rawHour === 12 ? 0 : rawHour;
+  return rawHour === 12 ? 12 : rawHour + 12;
+}
+
+function getVisibleTrendData(building: BuildingData) {
+  const roundedHour = getRoundedCurrentHour();
+  const visible = building.hourlyTrend.filter((point) => timeLabelTo24Hour(point.time) <= roundedHour);
+  return visible.length > 0 ? visible : building.hourlyTrend.slice(0, 1);
+}
+
+function getBestLocationRecommendation(buildings: BuildingData[]) {
+  if (!buildings.length) {
     return { buildingName: "-", time: "-", occupancy: 0 };
   }
 
+  const hour = getRoundedCurrentHour();
+  const slots = [8, 10, 12, 14, 16, 18, 20, 22];
+
+  let closestSlot = slots[0];
+  slots.forEach((slot) => {
+    if (Math.abs(slot - hour) < Math.abs(closestSlot - hour)) {
+      closestSlot = slot;
+    }
+  });
+
+  const slotLabelMap: Record<number, string> = {
+    8: "8AM",
+    10: "10AM",
+    12: "12PM",
+    14: "2PM",
+    16: "4PM",
+    18: "6PM",
+    20: "8PM",
+    22: "10PM",
+  };
+
+  const displayHour = hour % 12 === 0 ? 12 : hour % 12;
+  const displayLabel = `${displayHour}${hour >= 12 ? "PM" : "AM"}`;
+  const targetLabel = slotLabelMap[closestSlot];
+
   let bestBuilding = buildings[0];
-  let bestTime = buildings[0].hourlyTrend[0].time;
-  let lowest = buildings[0].hourlyTrend[0].occupancyPercent;
+  let bestOccupancy = 100;
 
   buildings.forEach((building) => {
-    building.hourlyTrend.forEach((point) => {
-      if (point.occupancyPercent < lowest) {
-        lowest = point.occupancyPercent;
-        bestBuilding = building;
-        bestTime = point.time;
-      }
-    });
+    const visiblePoints = getVisibleTrendData(building);
+    const point = visiblePoints.find((entry) => entry.time === targetLabel) ?? visiblePoints[visiblePoints.length - 1];
+    if (point && point.occupancyPercent < bestOccupancy) {
+      bestOccupancy = point.occupancyPercent;
+      bestBuilding = building;
+    }
   });
 
   return {
     buildingName: bestBuilding.shortName,
-    time: bestTime,
-    occupancy: lowest,
+    time: displayLabel,
+    occupancy: bestOccupancy,
   };
 }
 
@@ -312,7 +358,7 @@ export const __testCases = {
     { input: 50, expected: "mid" },
     { input: 80, expected: "high" },
   ],
-  bestTime: getBestTimeRecommendation(MOCK_BUILDINGS),
+  bestTime: getBestLocationRecommendation(MOCK_BUILDINGS),
   buildingCount: MOCK_BUILDINGS.length,
 };
 
@@ -371,11 +417,18 @@ function useBuildingData() {
   };
 
   useEffect(() => {
-    if (liveMode !== "api") return;
-
-    void refreshFromApi();
-    const interval = setInterval(() => {
+    if (liveMode === "api") {
       void refreshFromApi();
+    } else {
+      refreshFromMock();
+    }
+
+    const interval = setInterval(() => {
+      if (liveMode === "api") {
+        void refreshFromApi();
+      } else {
+        refreshFromMock();
+      }
     }, 3000);
 
     return () => clearInterval(interval);
@@ -421,18 +474,21 @@ function TrendPill({ trend }: { trend: Trend }) {
   );
 }
 
-function BestTimeBanner({ buildings }: { buildings: BuildingData[] }) {
-  const recommendation = useMemo(() => getBestTimeRecommendation(buildings), [buildings]);
+function BestLocationBanner({ buildings }: { buildings: BuildingData[] }) {
+  const recommendation = useMemo(() => getBestLocationRecommendation(buildings), [buildings]);
 
   return (
     <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-emerald-900 shadow-sm">
-      <div className="text-sm font-medium text-emerald-700">Best time recommendation</div>
+      <div className="text-sm font-medium text-emerald-700">Best location recommendation</div>
       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
         <span className="text-2xl font-bold">{recommendation.buildingName}</span>
-        <span className="text-lg">around {recommendation.time}</span>
+        <span className="text-lg">best around {recommendation.time}</span>
         <span className="rounded-full bg-white px-3 py-1 text-sm font-medium text-emerald-800 ring-1 ring-emerald-200">
-          Expected occupancy: {recommendation.occupancy}%
+          Current best estimate: {recommendation.occupancy}%
         </span>
+      </div>
+      <div className="mt-2 text-sm text-emerald-700">
+        Recommended location based on occupancy data.
       </div>
     </div>
   );
@@ -520,10 +576,12 @@ function FloorCard({ floor }: { floor: FloorData }) {
 }
 
 function OccupancyTrendChart({ building }: { building: BuildingData }) {
+  const visibleTrend = useMemo(() => getVisibleTrendData(building), [building]);
+
   return (
     <div className="h-[280px] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={building.hourlyTrend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+        <LineChart data={visibleTrend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
           <XAxis dataKey="time" tickLine={false} axisLine={false} fontSize={12} />
           <YAxis
@@ -611,10 +669,26 @@ function BuildingDetailPage({
               </div>
             </div>
           )}
+
+          {/* Operating hours moved here to save vertical space */}
+          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-start gap-3">
+              <div className="rounded-xl bg-white p-2 ring-1 ring-slate-200">
+                <Clock3 className="h-5 w-5 text-slate-700" />
+              </div>
+              <div>
+                <div className="text-sm font-semibold text-slate-700">Operating hours</div>
+                <div className="text-base font-medium text-slate-900">{building.operationHours}</div>
+                {building.hoursNote ? (
+                  <div className="mt-1 text-sm text-slate-600">{building.hoursNote}</div>
+                ) : null}
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
-      <HoursCard operationHours={building.operationHours} hoursNote={building.hoursNote} />
+      
 
       <Card className="rounded-3xl border-slate-200/70 bg-white/90 shadow-xl shadow-slate-200/30 backdrop-blur">
         <CardHeader>
@@ -623,7 +697,7 @@ function BuildingDetailPage({
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="cards" className="w-full">
-            <TabsList className="mb-5 grid w-full grid-cols-2 rounded-xl bg-slate-100">
+            <TabsList className="mb-5 ml-auto grid w-full max-w-[320px] grid-cols-2 rounded-xl bg-slate-100">
               <TabsTrigger value="cards" className="rounded-lg">
                 Cards
               </TabsTrigger>
@@ -767,7 +841,7 @@ export default function CampusPulseFrontend() {
             </div>
           </div>
 
-          <BestTimeBanner buildings={buildings} />
+          <BestLocationBanner buildings={buildings} />
 
           <AnimatePresence>
             {alerts.length > 0 && (
