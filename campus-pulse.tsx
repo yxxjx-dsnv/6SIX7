@@ -289,18 +289,22 @@ function getRoundedCurrentHour() {
 }
 
 function timeLabelTo24Hour(label: string) {
-  const match = label.match(/^(\d+)(AM|PM)$/);
+  // Handles "9AM", "12PM", "2:30PM", etc.
+  const match = label.match(/^(\d+)(?::(\d+))?(AM|PM)$/);
   if (!match) return 0;
   const rawHour = Number(match[1]);
-  const meridiem = match[2];
-  if (meridiem === "AM") return rawHour === 12 ? 0 : rawHour;
-  return rawHour === 12 ? 12 : rawHour + 12;
+  const meridiem = match[3];
+  const hour24 = meridiem === "AM" ? (rawHour === 12 ? 0 : rawHour) : (rawHour === 12 ? 12 : rawHour + 12);
+  const minutes = match[2] ? Number(match[2]) / 60 : 0;
+  return hour24 + minutes;
 }
 
 function getVisibleTrendData(building: BuildingData) {
+  if (!building.hourlyTrend.length) return [];
   const roundedHour = getRoundedCurrentHour();
   const visible = building.hourlyTrend.filter((point) => timeLabelTo24Hour(point.time) <= roundedHour);
-  return visible.length > 0 ? visible : building.hourlyTrend.slice(0, 1);
+  // If nothing falls before the current hour (e.g. mock data at midnight), show all points
+  return visible.length > 0 ? visible : building.hourlyTrend;
 }
 
 function getBestLocationRecommendation(buildings: BuildingData[]) {
@@ -420,7 +424,8 @@ function useBuildingData() {
     if (liveMode === "api") {
       void refreshFromApi();
     } else {
-      refreshFromMock();
+      // Seed with MOCK_BUILDINGS so refreshFromMock has data to jitter
+      setBuildings(MOCK_BUILDINGS);
     }
 
     const interval = setInterval(() => {
