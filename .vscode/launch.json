@@ -1,13 +1,30 @@
 {
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "C/C++ Runner: Debug Session",
-      "type": "lldb",
-      "request": "launch",
-      "args": [],
-      "cwd": ".",
-      "program": "build/Debug/outDebug"
-    }
+"version": "0.2.0",
+"configurations": [
+{
+  "name": "Python: Current File",
+  "type": "debugpy",
+  "request": "launch",
+  "program": "${file}",
+  "console": "integratedTerminal"
+},
+
+{
+  "name": "Node: Run app.js",
+  "type": "node",
+  "request": "launch",
+  "program": "${workspaceFolder}/app.js",
+  "skipFiles": [
+    "<node_internals>/**"
   ]
+},
+
+{
+  "name": "Chrome: React App",
+  "type": "pwa-chrome",
+  "request": "launch",
+  "url": "http://localhost:5173",
+  "webRoot": "${workspaceFolder}"
+}
+]
 }
