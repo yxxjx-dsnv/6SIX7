@@ -5,6 +5,10 @@ Welcome to our "Campus Pulse"--a website where students can check how busy campu
 
 # Table of Contents
 1. [Setup and Installation](#Setup-and-Installation)
+2. [Pre-requisites](#Pre-requisites)
+3. [How to Use](#How-to-Use)
+4. [Challenges and Solutions](#Challenges-and-Solutions)
+   
 # Setup and Installation
 ## Pre-requisites
 - Node.js and npm installed.
