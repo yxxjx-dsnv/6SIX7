@@ -1,89 +1,50 @@
 """
 Campus Pulse backend — exposes GET /api/buildings
-Each floor is mapped to an image file. Rekognition counts people,
-and occupancyPercent = (count / capacity) * 100.
-
-To add a real building/floor, add an entry to BUILDINGS below and
-point "image" at the photo for that floor (relative to this file).
+Pulls the latest occupancy reading per floor from DynamoDB.
 """
 
 from flask import Flask, jsonify
 import boto3
-import os
-from datetime import datetime
+from boto3.dynamodb.conditions import Key
+from config import BUILDINGS, DYNAMO_TABLE, AWS_REGION, floor_id
 
 app = Flask(__name__)
-rek = boto3.client("rekognition", region_name="us-west-2")
-
-# ---------------------------------------------------------------------------
-# Building / floor config — edit this to match your locations.
-# "image" is the path to the photo for that floor (relative to api.py).
-# "capacity" is the max number of people for that floor.
-# ---------------------------------------------------------------------------
-BUILDINGS = [
-    {
-        "id": "robarts-commons",
-        "name": "Robarts Commons",
-        "shortName": "Robarts",
-        "emergency": False,
-        "statusNote": "Live data from cameras.",
-        "services": ["Study Space", "Quiet Zones", "Group Rooms"],
-        "floors": [
-            {"floor": "1F", "image": "images/robarts_1f.jpg", "capacity": 100},
-            {"floor": "2F", "image": "images/robarts_2f.jpg", "capacity": 80},
-            {"floor": "3F", "image": "images/robarts_3f.jpg", "capacity": 60},
-        ],
-    },
-    {
-        "id": "gerstein-library",
-        "name": "Gerstein Science Information Centre",
-        "shortName": "Gerstein",
-        "emergency": False,
-        "statusNote": "Live data from cameras.",
-        "services": ["Silent Study", "Computers", "Medical Sciences"],
-        "floors": [
-            {"floor": "1F", "image": "images/gerstein_1f.jpg", "capacity": 80},
-            {"floor": "2F", "image": "images/gerstein_2f.jpg", "capacity": 60},
-        ],
-    },
-]
+dynamo = boto3.resource("dynamodb", region_name=AWS_REGION)
+table = dynamo.Table(DYNAMO_TABLE)
 
 
-def count_people(image_path: str) -> int:
-    """Run Rekognition on a local image and return the person count."""
-    with open(image_path, "rb") as f:
-        payload = f.read()
-    response = rek.detect_labels(
-        Image={"Bytes": payload},
-        MinConfidence=70,
+def get_latest_floor_reading(fid: str) -> dict | None:
+    """Return the most recent DynamoDB item for a floor, or None."""
+    response = table.query(
+        KeyConditionExpression=Key("floor_id").eq(fid),
+        ScanIndexForward=False,  # newest first
+        Limit=1,
     )
-    person_label = next(
-        (label for label in response["Labels"] if label["Name"] == "Person"), None
-    )
-    return len(person_label["Instances"]) if person_label else 0
+    items = response.get("Items", [])
+    return items[0] if items else None
 
 
 @app.route("/api/buildings")
 def get_buildings():
-    now = datetime.now().strftime("%-I:%M %p")
     result = []
 
     for building in BUILDINGS:
         floors = []
         for floor_cfg in building["floors"]:
-            image_path = os.path.join(os.path.dirname(__file__), floor_cfg["image"])
+            fid = floor_id(building["id"], floor_cfg["floor"])
+            item = get_latest_floor_reading(fid)
 
-            if not os.path.exists(image_path):
-                # Skip floors with no image yet
-                print(f"Warning: image not found for {building['id']} {floor_cfg['floor']}: {image_path}")
-                continue
+            if item is None:
+                continue  # no data yet for this floor
 
-            count = count_people(image_path)
-            pct = min(100, round((count / floor_cfg["capacity"]) * 100))
+            # DynamoDB stores Decimals — convert to int for JSON
+            pct = int(item["occupancy_percent"])
+            ts = item["timestamp"]  # ISO 8601 string
+
             floors.append({
                 "floor": floor_cfg["floor"],
                 "occupancyPercent": pct,
-                "lastUpdated": now,
+                "lastUpdated": ts,
             })
 
         if not floors:
@@ -98,7 +59,7 @@ def get_buildings():
             "emergency": building["emergency"],
             "statusNote": building["statusNote"],
             "services": building["services"],
-            "lastUpdated": now,
+            "lastUpdated": floors[0]["lastUpdated"],
             "floors": floors,
         })
 

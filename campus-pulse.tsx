@@ -283,8 +283,13 @@ function normalizeApiPayload(payload: BuildingApiShape[]): BuildingData[] {
   }));
 }
 
+// In dev: uses Vite proxy (/api → localhost:5000).
+// In production: set VITE_API_URL to the API Gateway URL in .env.local
+const BUILDINGS_ENDPOINT =
+  import.meta.env.VITE_API_URL ?? "/api/buildings";
+
 async function fetchBuildings(): Promise<BuildingData[]> {
-  const response = await fetch("/api/buildings", { cache: "no-store" });
+  const response = await fetch(BUILDINGS_ENDPOINT, { cache: "no-store" });
   if (!response.ok) {
     throw new Error("Failed to fetch building data");
   }
