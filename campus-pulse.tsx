@@ -1,15 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Activity,
   AlertTriangle,
   ArrowLeft,
   Building2,
   Clock3,
-  Layers3,
   Minus,
   RefreshCw,
   Search,
-  ShieldAlert,
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
@@ -32,29 +29,21 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 
-// Shared occupancy buckets used in labels and styling.
 type OccupancyLevel = "low" | "mid" | "high";
-
-// Lightweight trend state shown in summary chips.
 type Trend = "up" | "down" | "stable";
+type PageView = "dashboard" | "building-detail" | "buildings";
 
-// Simple page state so the app can switch views without a router.
-type PageView = "dashboard" | "buildings";
-
-// Floor-level snapshot for the detail panel.
 type FloorData = {
   floor: string;
   occupancyPercent: number;
   lastUpdated: string;
 };
 
-// Hourly points power the trend charts.
 type HourlyPoint = {
   time: string;
   occupancyPercent: number;
 };
 
-// Normalized building model used by the UI.
 type BuildingData = {
   id: string;
   name: string;
@@ -71,7 +60,6 @@ type BuildingData = {
   hoursNote?: string;
 };
 
-// Expected backend shape. The frontend normalizes this into BuildingData.
 type BuildingApiShape = {
   id: string;
   name: string;
@@ -256,8 +244,6 @@ function formatClock(date: Date) {
   }).format(date);
 }
 
-// The UI uses a strict normalized model so rendering code does not need
-// repetitive null checks.
 function normalizeApiPayload(payload: BuildingApiShape[]): BuildingData[] {
   return payload.map((building) => ({
     id: building.id,
@@ -283,13 +269,8 @@ function normalizeApiPayload(payload: BuildingApiShape[]): BuildingData[] {
   }));
 }
 
-// In dev: uses Vite proxy (/api → localhost:5000).
-// In production: set VITE_API_URL to the API Gateway URL in .env.local
-const BUILDINGS_ENDPOINT =
-  import.meta.env.VITE_API_URL ?? "/api/buildings";
-
 async function fetchBuildings(): Promise<BuildingData[]> {
-  const response = await fetch(BUILDINGS_ENDPOINT, { cache: "no-store" });
+  const response = await fetch("/api/buildings", { cache: "no-store" });
   if (!response.ok) {
     throw new Error("Failed to fetch building data");
   }
@@ -298,20 +279,6 @@ async function fetchBuildings(): Promise<BuildingData[]> {
   return normalizeApiPayload(json);
 }
 
-// Extracted helper: easier to reason about and easy to test.
-function buildComparisonSeries(buildings: BuildingData[]) {
-  const times = buildings[0]?.hourlyTrend.map((point) => point.time) ?? [];
-
-  return times.map((time, index) => {
-    const row: Record<string, string | number> = { time };
-    buildings.forEach((building) => {
-      row[building.shortName] = building.hourlyTrend[index]?.occupancyPercent ?? 0;
-    });
-    return row;
-  });
-}
-
-// Extracted helper: finds the best low-density slot across all buildings.
 function getBestTimeRecommendation(buildings: BuildingData[]) {
   if (!buildings.length || !buildings[0]?.hourlyTrend.length) {
     return { buildingName: "-", time: "-", occupancy: 0 };
@@ -338,15 +305,14 @@ function getBestTimeRecommendation(buildings: BuildingData[]) {
   };
 }
 
-// Simple dev-visible test cases for the pure helpers above.
 export const __testCases = {
   levelFromPercent: [
     { input: 20, expected: "low" },
     { input: 50, expected: "mid" },
     { input: 80, expected: "high" },
   ],
-  comparisonSeriesLength: buildComparisonSeries(MOCK_BUILDINGS).length,
   bestTime: getBestTimeRecommendation(MOCK_BUILDINGS),
+  buildingCount: MOCK_BUILDINGS.length,
 };
 
 function useBuildingData() {
@@ -357,7 +323,6 @@ function useBuildingData() {
   const [lastRefresh, setLastRefresh] = useState<string>(formatClock(new Date()));
 
   const refreshFromMock = () => {
-    // Mock mode lightly randomizes values so demos still feel live.
     setBuildings((current) =>
       current.map((building) => {
         const buildingDelta = Math.floor(Math.random() * 13) - 6;
@@ -455,47 +420,20 @@ function TrendPill({ trend }: { trend: Trend }) {
   );
 }
 
-function SummaryStat({
-  icon: Icon,
-  label,
-  value,
-  sub,
-  onClick,
-}: {
-  icon: React.ComponentType<any>;
-  label: string;
-  value: string;
-  sub?: string;
-  onClick?: () => void;
-}) {
-  const Wrapper = onClick ? motion.button : "div";
+function BestTimeBanner({ buildings }: { buildings: BuildingData[] }) {
+  const recommendation = useMemo(() => getBestTimeRecommendation(buildings), [buildings]);
 
   return (
-    <Wrapper
-      {...(onClick
-        ? {
-            whileHover: { y: -2 },
-            whileTap: { scale: 0.995 },
-            onClick,
-          }
-        : {})}
-      className={`w-full text-left ${onClick ? "cursor-pointer" : "cursor-default"}`}
-    >
-      <Card className="rounded-2xl border-slate-200 shadow-sm transition hover:shadow-md">
-        <CardContent className="p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
-              <div className="mt-1 text-2xl font-bold text-slate-900">{value}</div>
-              {sub ? <div className="mt-1 text-xs text-slate-500">{sub}</div> : null}
-            </div>
-            <div className="rounded-xl bg-slate-100 p-2.5">
-              <Icon className="h-5 w-5 text-slate-700" />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </Wrapper>
+    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-emerald-900 shadow-sm">
+      <div className="text-sm font-medium text-emerald-700">Best time recommendation</div>
+      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="text-2xl font-bold">{recommendation.buildingName}</span>
+        <span className="text-lg">around {recommendation.time}</span>
+        <span className="rounded-full bg-white px-3 py-1 text-sm font-medium text-emerald-800 ring-1 ring-emerald-200">
+          Expected occupancy: {recommendation.occupancy}%
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -523,65 +461,31 @@ function HoursCard({ operationHours, hoursNote }: { operationHours: string; hour
   );
 }
 
-function BuildingRow({
+function BuildingDirectoryCard({
   building,
-  selected,
   onClick,
 }: {
   building: BuildingData;
-  selected: boolean;
   onClick: () => void;
 }) {
-  const level = levelFromPercent(building.occupancyPercent);
-  const floorAverage =
-    building.floors.reduce((sum, floor) => sum + floor.occupancyPercent, 0) /
-    Math.max(1, building.floors.length);
-  const trend = trendFromValues(building.occupancyPercent, floorAverage);
-
   return (
-    <motion.button
-      whileHover={{ y: -1 }}
-      whileTap={{ scale: 0.997 }}
+    <button
       onClick={onClick}
-      className={`w-full rounded-2xl border p-4 text-left transition-all ${
-        selected
-          ? "border-slate-900 bg-slate-900 text-white shadow-lg"
-          : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
-      }`}
+      className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${selected ? "bg-white/10" : "bg-slate-100"}`}>
-              <Building2 className={`h-5 w-5 ${selected ? "text-white" : "text-slate-700"}`} />
-            </div>
-            <div className="min-w-0">
-              <div className="truncate text-sm font-semibold md:text-base">{building.shortName}</div>
-              <div className={`truncate text-xs ${selected ? "text-slate-300" : "text-slate-500"}`}>{building.name}</div>
-            </div>
-          </div>
+      <div className="min-w-0">
+        <div className="text-lg font-semibold text-slate-900">{building.shortName}</div>
+        <div className="text-sm text-slate-500">{building.name}</div>
+        <div className="mt-1 text-xs text-slate-500">{building.operationHours}</div>
+      </div>
+      <div className="ml-4 flex shrink-0 items-center gap-3">
+        <div className="text-right">
+          <div className="text-3xl font-bold tracking-tight text-slate-900">{building.occupancyPercent}%</div>
+          <div className="text-xs text-slate-500">Updated {building.lastUpdated}</div>
         </div>
+        <StatusPill level={levelFromPercent(building.occupancyPercent)} />
       </div>
-
-      <div className="mt-4 flex items-center justify-between gap-2">
-        <div className="text-2xl font-bold">{building.occupancyPercent}%</div>
-        <div className="flex items-center gap-2">
-          {building.emergency && (
-            <Badge className={`rounded-full border-0 ${selected ? "bg-red-500 text-white" : "bg-red-100 text-red-700"}`}>
-              Alert
-            </Badge>
-          )}
-          <div className={selected ? "[&_span]:text-white" : ""}>
-            <StatusPill level={level} />
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <TrendPill trend={trend} />
-        <div className={`text-xs ${selected ? "text-slate-300" : "text-slate-500"}`}>Updated {building.lastUpdated}</div>
-      </div>
-    </motion.button>
+    </button>
   );
 }
 
@@ -621,7 +525,13 @@ function OccupancyTrendChart({ building }: { building: BuildingData }) {
         <LineChart data={building.hourlyTrend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
           <XAxis dataKey="time" tickLine={false} axisLine={false} fontSize={12} />
-          <YAxis tickLine={false} axisLine={false} fontSize={12} domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
+          <YAxis
+            tickLine={false}
+            axisLine={false}
+            fontSize={12}
+            domain={[0, 100]}
+            tickFormatter={(value) => `${value}%`}
+          />
           <Tooltip formatter={(value: number) => [`${value}%`, "Occupancy"]} />
           <Line type="monotone" dataKey="occupancyPercent" stroke="#0f172a" strokeWidth={3} dot={false} />
         </LineChart>
@@ -630,53 +540,145 @@ function OccupancyTrendChart({ building }: { building: BuildingData }) {
   );
 }
 
-function BuildingComparisonChart({ buildings }: { buildings: BuildingData[] }) {
-  const data = useMemo(() => buildComparisonSeries(buildings), [buildings]);
+function BuildingDetailPage({
+  building,
+  onBack,
+}: {
+  building: BuildingData;
+  onBack: () => void;
+}) {
+  const floorAverage =
+    building.floors.reduce((sum, floor) => sum + floor.occupancyPercent, 0) /
+    Math.max(1, building.floors.length);
 
   return (
-    <div className="h-[300px] w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey="time" tickLine={false} axisLine={false} fontSize={12} />
-          <YAxis tickLine={false} axisLine={false} fontSize={12} domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
-          <Tooltip />
-          {buildings.slice(0, 4).map((building, index) => (
-            <Line
-              key={building.id}
-              type="monotone"
-              dataKey={building.shortName}
-              strokeWidth={3}
-              dot={false}
-              stroke={["#0f172a", "#2563eb", "#16a34a", "#ea580c"][index % 4]}
-            />
-          ))}
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-950">{building.name}</h2>
+          <p className="text-sm text-slate-600">Live building info, floor density, and daily trend.</p>
+        </div>
+        <Button variant="outline" className="rounded-xl" onClick={onBack}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back
+        </Button>
+      </div>
 
-function BestTimeCard({ buildings }: { buildings: BuildingData[] }) {
-  const recommendation = useMemo(() => getBestTimeRecommendation(buildings), [buildings]);
+      <Card className="overflow-hidden rounded-3xl border-slate-200/70 bg-white/90 shadow-xl shadow-slate-200/30 backdrop-blur">
+        <div className="border-b border-slate-200 bg-[linear-gradient(135deg,rgba(15,23,42,0.02),rgba(99,102,241,0.06))] p-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
+                <Clock3 className="h-3.5 w-3.5" />
+                Updated {building.lastUpdated}
+              </div>
+              <h3 className="text-3xl font-bold tracking-tight text-slate-950">{building.shortName}</h3>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                {building.statusNote ?? "Live building density and service status overview."}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {building.services.map((service) => (
+                  <Badge key={service} variant="outline" className="rounded-full px-3 py-1 text-slate-700">
+                    {service}
+                  </Badge>
+                ))}
+              </div>
+            </div>
 
-  return (
-    <Card className="rounded-3xl border-slate-200/70 bg-white/90 shadow-xl shadow-slate-200/30 backdrop-blur">
-      <CardHeader>
-        <CardTitle>Best Time Recommendation</CardTitle>
-        <CardDescription>Fastest way to see where and when it is least crowded.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-          <div className="text-sm text-emerald-700">Least crowded slot today</div>
-          <div className="mt-2 text-3xl font-bold text-emerald-900">{recommendation.buildingName}</div>
-          <div className="mt-1 text-lg text-emerald-800">Around {recommendation.time}</div>
-          <div className="mt-3 inline-flex rounded-full bg-white px-3 py-1 text-sm font-medium text-emerald-800 ring-1 ring-emerald-200">
-            Expected occupancy: {recommendation.occupancy}%
+            <div className="min-w-[220px] rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="text-xs uppercase tracking-wide text-slate-500">Current occupancy</div>
+              <div className="mt-2 text-5xl font-bold tracking-tight text-slate-950">{building.occupancyPercent}%</div>
+              <div className="mt-3 flex items-center gap-2">
+                <StatusPill level={levelFromPercent(building.occupancyPercent)} />
+                <TrendPill trend={trendFromValues(building.occupancyPercent, floorAverage)} />
+              </div>
+            </div>
           </div>
         </div>
-      </CardContent>
-    </Card>
+
+        <CardContent className="p-6">
+          {building.emergency && (
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+                <div>
+                  <div className="font-semibold">Emergency / service alert</div>
+                  <div className="mt-1 text-sm">
+                    {building.emergencyMessage ?? "An emergency has been reported in this building."}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <HoursCard operationHours={building.operationHours} hoursNote={building.hoursNote} />
+
+      <Card className="rounded-3xl border-slate-200/70 bg-white/90 shadow-xl shadow-slate-200/30 backdrop-blur">
+        <CardHeader>
+          <CardTitle>Floor Details</CardTitle>
+          <CardDescription>Per-floor density snapshot for the selected building.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="cards" className="w-full">
+            <TabsList className="mb-5 grid w-full grid-cols-2 rounded-xl bg-slate-100">
+              <TabsTrigger value="cards" className="rounded-lg">
+                Cards
+              </TabsTrigger>
+              <TabsTrigger value="table" className="rounded-lg">
+                Table
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="cards">
+              <div className="grid gap-4 md:grid-cols-2">
+                {building.floors.map((floor) => (
+                  <FloorCard key={floor.floor} floor={floor} />
+                ))}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="table">
+              <div className="overflow-hidden rounded-2xl border border-slate-200">
+                <div className="grid grid-cols-[120px_1fr_140px_120px] bg-slate-50 px-4 py-3 text-sm font-medium text-slate-600">
+                  <div>Floor</div>
+                  <div>Status</div>
+                  <div>Occupancy</div>
+                  <div>Updated</div>
+                </div>
+                {building.floors.map((floor) => {
+                  const level = levelFromPercent(floor.occupancyPercent);
+                  return (
+                    <div
+                      key={floor.floor}
+                      className="grid grid-cols-[120px_1fr_140px_120px] items-center border-t border-slate-200 px-4 py-3 text-sm"
+                    >
+                      <div className="font-medium text-slate-900">{floor.floor}</div>
+                      <div>
+                        <StatusPill level={level} />
+                      </div>
+                      <div className="font-semibold text-slate-900">{floor.occupancyPercent}%</div>
+                      <div className="text-slate-500">{floor.lastUpdated}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-3xl border-slate-200/70 bg-white/90 shadow-xl shadow-slate-200/30 backdrop-blur">
+        <CardHeader>
+          <CardTitle>Today’s Occupancy Trend</CardTitle>
+          <CardDescription>See when this building is busier or quieter during the day.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <OccupancyTrendChart building={building} />
+        </CardContent>
+      </Card>
+    </motion.div>
   );
 }
 
@@ -717,16 +719,6 @@ export default function CampusPulseFrontend() {
 
   const alerts = useMemo(() => buildings.filter((building) => building.emergency), [buildings]);
 
-  const averageOccupancy = useMemo(() => {
-    if (!buildings.length) return 0;
-    return Math.round(buildings.reduce((sum, building) => sum + building.occupancyPercent, 0) / buildings.length);
-  }, [buildings]);
-
-  const availableCount = useMemo(
-    () => buildings.filter((building) => levelFromPercent(building.occupancyPercent) === "low").length,
-    [buildings]
-  );
-
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0.06),_transparent_35%),linear-gradient(to_bottom,_#f8fafc,_#eef2ff_55%,_#f8fafc)] p-4 md:p-6">
       <div className="mx-auto max-w-7xl">
@@ -735,23 +727,35 @@ export default function CampusPulseFrontend() {
             <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <div className="mb-3 flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-sm font-bold text-white">CP</div>
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-sm font-bold text-white">
+                    CP
+                  </div>
                   <div className="flex flex-col">
                     <span className="text-sm tracking-wide text-slate-500">UofT Smart Campus</span>
                     <span className="text-xl font-semibold text-slate-950">Campus Pulse</span>
                   </div>
                 </div>
-                <h1 className="text-3xl font-bold tracking-tight text-slate-950 md:text-4xl">Live Campus Occupancy Dashboard</h1>
+                <h1 className="text-3xl font-bold tracking-tight text-slate-950 md:text-4xl">
+                  Live Campus Occupancy Dashboard
+                </h1>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 md:text-base">
-                  Building-level crowd status, floor-by-floor density, and hourly trend graphs. Ready to switch from mock data to the real occupancy system later.
+                  Building-level crowd status and floor-by-floor density. Designed for quick scanning and one-click building details.
                 </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <Button variant={liveMode === "mock" ? "default" : "outline"} className="rounded-xl" onClick={() => setLiveMode("mock")}>
+                <Button
+                  variant={liveMode === "mock" ? "default" : "outline"}
+                  className="rounded-xl"
+                  onClick={() => setLiveMode("mock")}
+                >
                   Mock Mode
                 </Button>
-                <Button variant={liveMode === "api" ? "default" : "outline"} className="rounded-xl" onClick={() => setLiveMode("api")}>
+                <Button
+                  variant={liveMode === "api" ? "default" : "outline"}
+                  className="rounded-xl"
+                  onClick={() => setLiveMode("api")}
+                >
                   API Mode
                 </Button>
                 <Button variant="outline" className="rounded-xl" onClick={refreshNow}>
@@ -760,20 +764,9 @@ export default function CampusPulseFrontend() {
                 </Button>
               </div>
             </div>
-
-            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <SummaryStat
-                icon={Building2}
-                label="Tracked Buildings"
-                value={String(buildings.length)}
-                sub="Click to view all supported buildings"
-                onClick={() => setPage("buildings")}
-              />
-              <SummaryStat icon={Activity} label="Avg Occupancy" value={`${averageOccupancy}%`} sub="Across all tracked buildings" />
-              <SummaryStat icon={Layers3} label="Low-Density Buildings" value={String(availableCount)} sub="Good options right now" />
-              <SummaryStat icon={ShieldAlert} label="Active Alerts" value={String(alerts.length)} sub={`Last refresh ${lastRefresh}`} />
-            </div>
           </div>
+
+          <BestTimeBanner buildings={buildings} />
 
           <AnimatePresence>
             {alerts.length > 0 && (
@@ -788,7 +781,9 @@ export default function CampusPulseFrontend() {
                   <div>
                     <div className="font-semibold">Active building alerts</div>
                     <div className="mt-1 text-sm">
-                      {alerts.map((building) => `${building.shortName}: ${building.emergencyMessage ?? "Emergency reported."}`).join(" • ")}
+                      {alerts
+                        .map((building) => `${building.shortName}: ${building.emergencyMessage ?? "Emergency reported."}`)
+                        .join(" • ")}
                     </div>
                   </div>
                 </div>
@@ -797,286 +792,86 @@ export default function CampusPulseFrontend() {
           </AnimatePresence>
         </motion.div>
 
-        {page === "dashboard" ? (
-          <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
-            <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }}>
-              <Card className="rounded-3xl border-slate-200/70 bg-white/90 shadow-xl shadow-slate-200/30 backdrop-blur">
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-xl">Supported Buildings</CardTitle>
-                  <CardDescription>Select a building to view floor-by-floor density.</CardDescription>
-                </CardHeader>
-
-                <CardContent className="space-y-4">
-                  <div className="grid gap-3 sm:grid-cols-[1fr_150px]">
-                    <div className="relative">
-                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search buildings" className="rounded-xl pl-9" />
-                    </div>
-                    <select
-                      value={sort}
-                      onChange={(e) => setSort(e.target.value as "crowded" | "quiet" | "alphabetical")}
-                      className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none"
-                    >
-                      <option value="crowded">Most crowded</option>
-                      <option value="quiet">Least crowded</option>
-                      <option value="alphabetical">A → Z</option>
-                    </select>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                    <div className="inline-flex items-center gap-2 rounded-full bg-white px-2.5 py-1 ring-1 ring-slate-200">
-                      <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Low
-                    </div>
-                    <div className="inline-flex items-center gap-2 rounded-full bg-white px-2.5 py-1 ring-1 ring-slate-200">
-                      <span className="h-2.5 w-2.5 rounded-full bg-orange-500" /> Mid
-                    </div>
-                    <div className="inline-flex items-center gap-2 rounded-full bg-white px-2.5 py-1 ring-1 ring-slate-200">
-                      <span className="h-2.5 w-2.5 rounded-full bg-red-500" /> High
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <ScrollArea className="h-[620px] pr-3">
-                    <div className="space-y-3">
-                      {filteredBuildings.map((building) => (
-                        <BuildingRow
-                          key={building.id}
-                          building={building}
-                          selected={selectedBuilding?.id === building.id}
-                          onClick={() => setSelectedId(building.id)}
-                        />
-                      ))}
-
-                      {filteredBuildings.length === 0 && (
-                        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
-                          No buildings match your search.
-                        </div>
-                      )}
-                    </div>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            <motion.div initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }}>
-              {selectedBuilding ? (
-                <div className="space-y-6">
-                  <Card className="overflow-hidden rounded-3xl border-slate-200/70 bg-white/90 shadow-xl shadow-slate-200/30 backdrop-blur">
-                    <div className="border-b border-slate-200 bg-[linear-gradient(135deg,rgba(15,23,42,0.02),rgba(99,102,241,0.06))] p-6">
-                      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-                        <div>
-                          <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
-                            <Clock3 className="h-3.5 w-3.5" />
-                            Updated {selectedBuilding.lastUpdated}
-                          </div>
-                          <h2 className="text-3xl font-bold tracking-tight text-slate-950">{selectedBuilding.name}</h2>
-                          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                            {selectedBuilding.statusNote ?? "Live building density and service status overview."}
-                          </p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {selectedBuilding.services.map((service) => (
-                              <Badge key={service} variant="outline" className="rounded-full px-3 py-1 text-slate-700">
-                                {service}
-                              </Badge>
-                            ))}
-                          </div>
-                          <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600">
-                            <Clock3 className="h-4 w-4" />
-                            <span>{selectedBuilding.operationHours}</span>
-                          </div>
-                        </div>
-
-                        <div className="min-w-[220px] rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-                          <div className="text-xs uppercase tracking-wide text-slate-500">Current occupancy</div>
-                          <div className="mt-2 text-5xl font-bold tracking-tight text-slate-950">{selectedBuilding.occupancyPercent}%</div>
-                          <div className="mt-3 flex items-center gap-2">
-                            <StatusPill level={levelFromPercent(selectedBuilding.occupancyPercent)} />
-                            <TrendPill
-                              trend={trendFromValues(
-                                selectedBuilding.occupancyPercent,
-                                selectedBuilding.floors.reduce((sum, floor) => sum + floor.occupancyPercent, 0) /
-                                  Math.max(1, selectedBuilding.floors.length)
-                              )}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <CardContent className="p-6">
-                      <div className="grid gap-4 md:grid-cols-3">
-                        <SummaryStat
-                          icon={Activity}
-                          label="Building Status"
-                          value={statusStyles(levelFromPercent(selectedBuilding.occupancyPercent)).label}
-                          sub="Based on occupancy thresholds"
-                        />
-                        <SummaryStat icon={Layers3} label="Floors Tracked" value={String(selectedBuilding.floors.length)} sub="Floor-level detail available" />
-                        <SummaryStat
-                          icon={ShieldAlert}
-                          label="Emergency Status"
-                          value={selectedBuilding.emergency ? "Alert" : "Normal"}
-                          sub={selectedBuilding.emergency ? "Attention recommended" : "No active alert"}
-                        />
-                      </div>
-
-                      {selectedBuilding.emergency && (
-                        <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800">
-                          <div className="flex items-start gap-3">
-                            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-                            <div>
-                              <div className="font-semibold">Emergency / service alert</div>
-                              <div className="mt-1 text-sm">{selectedBuilding.emergencyMessage ?? "An emergency has been reported in this building."}</div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <HoursCard operationHours={selectedBuilding.operationHours} hoursNote={selectedBuilding.hoursNote} />
-
-                  <Card className="rounded-3xl border-slate-200/70 bg-white/90 shadow-xl shadow-slate-200/30 backdrop-blur">
-                    <CardHeader>
-                      <CardTitle>Today’s Occupancy Trend</CardTitle>
-                      <CardDescription>See when this building is busier or quieter during the day.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <OccupancyTrendChart building={selectedBuilding} />
-                    </CardContent>
-                  </Card>
-
-                  <Card className="rounded-3xl border-slate-200/70 bg-white/90 shadow-xl shadow-slate-200/30 backdrop-blur">
-                    <CardHeader>
-                      <CardTitle>Floor Details</CardTitle>
-                      <CardDescription>Per-floor density snapshot for the selected building.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <Tabs defaultValue="cards" className="w-full">
-                        <TabsList className="mb-5 grid w-full grid-cols-2 rounded-xl bg-slate-100">
-                          <TabsTrigger value="cards" className="rounded-lg">Cards</TabsTrigger>
-                          <TabsTrigger value="table" className="rounded-lg">Table</TabsTrigger>
-                        </TabsList>
-
-                        <TabsContent value="cards">
-                          <div className="grid gap-4 md:grid-cols-2">
-                            {selectedBuilding.floors.map((floor) => (
-                              <FloorCard key={floor.floor} floor={floor} />
-                            ))}
-                          </div>
-                        </TabsContent>
-
-                        <TabsContent value="table">
-                          <div className="overflow-hidden rounded-2xl border border-slate-200">
-                            <div className="grid grid-cols-[120px_1fr_140px_120px] bg-slate-50 px-4 py-3 text-sm font-medium text-slate-600">
-                              <div>Floor</div>
-                              <div>Status</div>
-                              <div>Occupancy</div>
-                              <div>Updated</div>
-                            </div>
-                            {selectedBuilding.floors.map((floor) => {
-                              const level = levelFromPercent(floor.occupancyPercent);
-                              return (
-                                <div key={floor.floor} className="grid grid-cols-[120px_1fr_140px_120px] items-center border-t border-slate-200 px-4 py-3 text-sm">
-                                  <div className="font-medium text-slate-900">{floor.floor}</div>
-                                  <div><StatusPill level={level} /></div>
-                                  <div className="font-semibold text-slate-900">{floor.occupancyPercent}%</div>
-                                  <div className="text-slate-500">{floor.lastUpdated}</div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </TabsContent>
-                      </Tabs>
-                    </CardContent>
-                  </Card>
-                </div>
-              ) : (
-                <Card className="rounded-3xl border-slate-200 bg-white p-10 text-center shadow-sm">
-                  <CardTitle>No building selected</CardTitle>
-                </Card>
-              )}
-            </motion.div>
-          </div>
+        {page === "building-detail" && selectedBuilding ? (
+          <BuildingDetailPage building={selectedBuilding} onBack={() => setPage("dashboard")} />
         ) : (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-2xl font-bold text-slate-950">Supported Buildings</h2>
-                <p className="text-sm text-slate-600">All supported buildings with current live density status.</p>
+                <p className="text-sm text-slate-600">Click any building to open its detail page.</p>
               </div>
-              <Button variant="outline" className="rounded-xl" onClick={() => setPage("dashboard")}>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back
-              </Button>
+              {page === "buildings" && (
+                <Button variant="outline" className="rounded-xl" onClick={() => setPage("dashboard")}>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back
+                </Button>
+              )}
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-[1.1fr_minmax(0,1fr)]">
-              <Card className="rounded-3xl border-slate-200/70 bg-white/90 shadow-xl shadow-slate-200/30 backdrop-blur">
-                <CardHeader>
-                  <CardTitle>Building Directory</CardTitle>
-                  <CardDescription>Click any building card to inspect it on the main dashboard.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-3 sm:grid-cols-[1fr_170px]">
-                    <div className="relative">
-                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search supported buildings" className="rounded-xl pl-9" />
-                    </div>
-                    <select
-                      value={sort}
-                      onChange={(e) => setSort(e.target.value as "crowded" | "quiet" | "alphabetical")}
-                      className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none"
-                    >
-                      <option value="crowded">Most crowded</option>
-                      <option value="quiet">Least crowded</option>
-                      <option value="alphabetical">A → Z</option>
-                    </select>
+            <Card className="rounded-3xl border-slate-200/70 bg-white/90 shadow-xl shadow-slate-200/30 backdrop-blur">
+              <CardHeader>
+                <CardTitle>Building Directory</CardTitle>
+                <CardDescription>Choose a building to see its information page, floor details, and daily trend.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-[1fr_170px]">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Search supported buildings"
+                      className="rounded-xl pl-9"
+                    />
                   </div>
+                  <select
+                    value={sort}
+                    onChange={(e) => setSort(e.target.value as "crowded" | "quiet" | "alphabetical")}
+                    className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none"
+                  >
+                    <option value="crowded">Most crowded</option>
+                    <option value="quiet">Least crowded</option>
+                    <option value="alphabetical">A → Z</option>
+                  </select>
+                </div>
 
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-white px-2.5 py-1 ring-1 ring-slate-200">
+                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Low
+                  </div>
+                  <div className="inline-flex items-center gap-2 rounded-full bg-white px-2.5 py-1 ring-1 ring-slate-200">
+                    <span className="h-2.5 w-2.5 rounded-full bg-orange-500" /> Mid
+                  </div>
+                  <div className="inline-flex items-center gap-2 rounded-full bg-white px-2.5 py-1 ring-1 ring-slate-200">
+                    <span className="h-2.5 w-2.5 rounded-full bg-red-500" /> High
+                  </div>
+                </div>
+
+                <Separator />
+
+                <ScrollArea className="h-[620px] pr-3">
                   <div className="grid gap-3">
                     {filteredBuildings.map((building) => (
-                      <button
+                      <BuildingDirectoryCard
                         key={building.id}
+                        building={building}
                         onClick={() => {
                           setSelectedId(building.id);
-                          setPage("dashboard");
+                          setPage("building-detail");
                         }}
-                        className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:shadow-md"
-                      >
-                        <div>
-                          <div className="text-lg font-semibold text-slate-900">{building.shortName}</div>
-                          <div className="text-sm text-slate-500">{building.name}</div>
-                          <div className="mt-1 text-xs text-slate-500">{building.operationHours}</div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="text-right">
-                            <div className="text-xl font-bold text-slate-900">{building.occupancyPercent}%</div>
-                            <div className="text-xs text-slate-500">Updated {building.lastUpdated}</div>
-                          </div>
-                          <StatusPill level={levelFromPercent(building.occupancyPercent)} />
-                        </div>
-                      </button>
+                      />
                     ))}
+
+                    {filteredBuildings.length === 0 && (
+                      <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
+                        No buildings match your search.
+                      </div>
+                    )}
                   </div>
-                </CardContent>
-              </Card>
-
-              <div className="space-y-6">
-                <Card className="rounded-3xl border-slate-200/70 bg-white/90 shadow-xl shadow-slate-200/30 backdrop-blur">
-                  <CardHeader>
-                    <CardTitle>Hourly Comparison</CardTitle>
-                    <CardDescription>Compare which buildings are quieter at different times of day.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <BuildingComparisonChart buildings={buildings} />
-                  </CardContent>
-                </Card>
-
-                <BestTimeCard buildings={buildings} />
-              </div>
-            </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
           </motion.div>
         )}
 
