@@ -20,9 +20,9 @@ BUILDINGS = [
         "statusNote": "Live data from cameras.",
         "services": ["Study Space", "Quiet Zones", "Group Rooms"],
         "floors": [
-            {"floor": "1F", "capacity": 100, "video": "videos/robarts_1f.mp4"},
-            {"floor": "2F", "capacity": 80,  "video": "videos/robarts_2f.mp4"},
-            {"floor": "3F", "capacity": 60,  "video": "videos/robarts_3f.mp4"},
+            {"floor": "1F", "capacity": 100, "video": "videos/robarts.mp4"},
+            {"floor": "2F", "capacity": 80,  "video": "videos/robarts.mp4"},
+            {"floor": "3F", "capacity": 60,  "video": "videos/robarts.mp4"},
         ],
     },
     {
@@ -33,8 +33,36 @@ BUILDINGS = [
         "statusNote": "Live data from cameras.",
         "services": ["Silent Study", "Computers", "Medical Sciences"],
         "floors": [
-            {"floor": "1F", "capacity": 80, "video": "videos/gerstein_1f.mp4"},
-            {"floor": "2F", "capacity": 60, "video": "videos/gerstein_2f.mp4"},
+            {"floor": "1F", "capacity": 80, "video": "videos/gerstein.mp4"},
+            {"floor": "2F", "capacity": 60, "video": "videos/gerstein.mp4"},
+        ],
+    },
+    {
+        "id": "bahen-centre",
+        "name": "Bahen Centre for Information Technology",
+        "shortName": "Bahen",
+        "emergency": False,
+        "statusNote": "Live data from cameras.",
+        "services": ["Labs", "Study Space", "Lecture Halls"],
+        "floors": [
+            {"floor": "2F", "capacity": 100, "video": "videos/bahen.mp4"},
+            {"floor": "3F", "capacity": 80,  "video": "videos/bahen.mp4"},
+            {"floor": "1F", "capacity": 120, "video": "videos/bahen.mp4"},
+            {"floor": "4F", "capacity": 80,  "video": "videos/bahen.mp4"},
+        ],
+    },
+    {
+        "id": "sidney-smith",
+        "name": "Sidney Smith Hall",
+        "shortName": "Sidney Smith",
+        "emergency": False,
+        "statusNote": "Live data from cameras.",
+        "services": ["Study Area", "Classrooms", "Transit Nearby"],
+        "floors": [
+            {"floor": "1F", "capacity": 100, "video": "videos/sidney.mp4"},
+            {"floor": "2F", "capacity": 80,  "video": "videos/sidney.mp4"},
+            {"floor": "3F", "capacity": 80,  "video": "videos/sidney.mp4"},
+            {"floor": "4F", "capacity": 60,  "video": "videos/sidney.mp4"},
         ],
     },
 ]

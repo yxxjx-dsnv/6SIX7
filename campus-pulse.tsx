@@ -270,7 +270,8 @@ function normalizeApiPayload(payload: BuildingApiShape[]): BuildingData[] {
 }
 
 async function fetchBuildings(): Promise<BuildingData[]> {
-  const response = await fetch("/api/buildings", { cache: "no-store" });
+  const url = import.meta.env.VITE_API_URL ?? "/api/buildings";
+  const response = await fetch(url, { cache: "no-store" });
   if (!response.ok) {
     throw new Error("Failed to fetch building data");
   }
@@ -316,9 +317,9 @@ export const __testCases = {
 };
 
 function useBuildingData() {
-  const [buildings, setBuildings] = useState<BuildingData[]>(MOCK_BUILDINGS);
-  const [loading, setLoading] = useState(false);
-  const [liveMode, setLiveMode] = useState<"mock" | "api">("mock");
+  const [liveMode, setLiveMode] = useState<"mock" | "api">("api");
+  const [buildings, setBuildings] = useState<BuildingData[]>(liveMode === "mock" ? MOCK_BUILDINGS : []);
+  const [loading, setLoading] = useState(liveMode === "api");
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<string>(formatClock(new Date()));
 
@@ -375,7 +376,7 @@ function useBuildingData() {
     void refreshFromApi();
     const interval = setInterval(() => {
       void refreshFromApi();
-    }, 10000);
+    }, 3000);
 
     return () => clearInterval(interval);
   }, [liveMode]);
@@ -876,8 +877,9 @@ export default function CampusPulseFrontend() {
         )}
 
         {error && (
-          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            API mode error: {error}
+          <div className="mt-4 rounded-2xl border border-red-300 bg-red-50 px-5 py-4 text-red-800 shadow-sm">
+            <div className="font-semibold">Cannot reach API — is <code>python api.py</code> running?</div>
+            <div className="mt-1 text-sm opacity-80">{error}</div>
           </div>
         )}
       </div>
