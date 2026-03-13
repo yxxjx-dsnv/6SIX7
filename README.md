@@ -4,7 +4,7 @@ Have you ever walked into a library only to realize that there is not single spo
 Welcome to our "Campus Pulse"--a website where students can check how busy campus libraries are, viewing operating hours, and stay updated on important announcements, such as temporary closures. 
 
 # Table of Contents
-1. [Setup and Installation](##Setup and Installation)
+1. [Setup and Installation](#Setup and Installation)
 # Setup and Installation
 ## Pre-requisites
 - Node.js and npm installed.
